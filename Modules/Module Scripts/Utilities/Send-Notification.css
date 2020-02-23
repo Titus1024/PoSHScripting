@@ -1,0 +1,41 @@
+table {
+    border-style: 0.15em solid black;
+    border-bottom-color: red;
+}
+
+table, th, td {
+    border: 0.15em solid darkslategray;
+    border-collapse: collapse;
+    width: 40em;
+}
+
+td#severityLevel {
+    /** ADD JAVASCRIPT SYMBOL HERE
+    *   WHEN YOU CHANGE SEVERITY 
+    *   LEVEL BETWEEN HIGH, MEDIUM
+    *   AND LOW
+    */
+}
+
+th {
+    width: 10em;
+    font-size: 1.1em;
+}
+
+td {
+    padding: 0.5em 1em 0.5em 1em;
+    font-size: 1.1em;
+}
+
+td.advisory {
+    text-align: left;
+    border: 0em ridge black;
+}
+
+span.boldMe {
+    font-weight: bold;
+}
+
+tbody {
+    border: 0.25em ridge red;
+}
