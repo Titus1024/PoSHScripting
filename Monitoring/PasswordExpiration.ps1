@@ -166,7 +166,8 @@ function PasswordExpiration {
                 Priority   = 'High'
             }
             Send-MailMessage @Properties
-            Write-Log "Sending email to $($User.Name). Their password has expired."
+
+            Write-Log "Sending email to $($User.Name). Their password has expired. PasswordExpiration Value - $PasswordExpiration"
         }
     }
 }
