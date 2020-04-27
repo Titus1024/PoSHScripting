@@ -29,7 +29,7 @@ Import-Module PSCreds
 
 ### Variables ###
 <# Used for logging #>$ScriptName = 'MonitorVMSnapshots'
-$Credential = Use-PSCred -Identity PSVMWareAdmin -Email
+$Credential = Use-PSCred -Identity REDACTED -Email
 $ThresholdDate = -7 # Days
 $ThresholdSize = 2 # GB
 ### Variables ###
