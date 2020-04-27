@@ -4,7 +4,7 @@ function Disable-User {
     Function used to streamline the process of disabling an ADUser.
 .DESCRIPTION
     Developer:  Mike Polselli
-    PSVersion:  5.0
+    PSVersion:  5.1
     Language:   PowerShell
     Purpose:    This function will be used to streamline the process of disabling an ADUser.
                 Tasks that this function does.
@@ -70,8 +70,6 @@ function Disable-User {
         Get-Help $MyInvocation.MyCommand.Name -Full | more
         break
     }
-    #Write-Warning 'Still in development.'
-    #break
     # Logging purposes.
     $ADCredential = Use-PSCred -Identity PSADAcctMgmt
     $LicenseCredential = Use-PSCred -Identity PSLicenseAdmin -Email
@@ -120,7 +118,7 @@ function Disable-User {
             do {
                 $RandomPW = [System.Web.Security.Membership]::GeneratePassword(20, 8)
             }
-            Until ($RandomPW -match '\d')
+            Until ($RandomPW -match '^(?=.*[A-Z].*[A-Z])(?=.*[!@#$%^&*()_])(?=.*[0-9].*[0-9])(?=.*[a-z].*[a-z].*[a-z]).{20}$')
             $Properties = @{
                 Identity    = $User.SamAccountName
                 Reset       = $true
@@ -151,6 +149,15 @@ function Disable-User {
                 catch {
                     continue
                 }
+            }
+
+            # Removes the user from manager's direct report list
+            try {
+                Set-ADUser -Identity $User.SamAccountName -Manager $null -Credential $ADCredential -ErrorAction Stop
+                Write-Log "Removed $($User.Name) from $($Manager.Name)'s list of direct reports." -ShowOutput
+            }
+            catch {
+                Write-LogError $PSItem.Exception.Message -ShowOutput
             }
 
             # Moves the user's AD account to the disabled OU.
@@ -218,10 +225,10 @@ function Disable-User {
 
     # Remove user from distribution groups.
     $Groups = Import-Csv -Path \\$env:USERDNSDOMAIN\IT\PowerShell\DynamicParamFiles\DistributionGroupPermissions.csv |
-    Where-Object { $PSitem.Name -eq $User.Name }
+    Where-Object { $PSItem.Name -eq $User.Name }
     foreach ($Group in $Groups) {
         try {
-            Remove-DistributionGroupMember -Identity $Group.GroupName -Member $User.SamAccountName -ErrorAction Continue -Confirm:$false
+            Remove-DistributionGroupMember -Identity $Group.GroupName -Member $User.SamAccountName -ErrorAction SilentlyContinue -Confirm:$false
             Write-Log "Removed $($User.Name) from $($Group.GroupName)." -ShowOutput
         }
         catch {
@@ -240,7 +247,7 @@ function Disable-User {
             Write-Log "Converting $($User.Name)'s mailbox into a shared mailbox." -ShowOutput
             Write-Output 'Processing changes...'
             # Should prevent any weird issues from the mailbox being converted.
-            Start-Sleep -Seconds 5
+            Start-Sleep -Seconds 10
             $Properties = @{
                 Identity     = $Identity
                 User         = $Manager.SamAccountName
@@ -395,6 +402,7 @@ REDACTED IT
         Write-LogError $PSItem.Exception.Message -ShowOutput
         Disconnect-SPOService
     }
+    #TODO: Add token removal for all active logins.
     #}
 
     $HelpDeskURL = "http://helpdesk.REDACTED.org/portal/view-help-request/$TicketNumber"

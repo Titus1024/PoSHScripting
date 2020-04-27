@@ -91,22 +91,22 @@ function New-User {
         Company           = 'REDACTED'
         Confirm           = $false
         Credential        = $ADCredential
-        Department        = $UserData.Department
-        Description       = $UserData.Title
-        DisplayName       = $UserData.PreferredName
-        EmailAddress      = "$(($UserData.PreferredName).Split(" ")[0][0]+($UserData.PreferredName).Split(" ")[1])" + '@REDACTED.org'
-        EmployeeID        = $UserData.EmployeeID
+        Department        = $UserData.Department.TrimEnd()
+        Description       = $UserData.Title.TrimEnd()
+        DisplayName       = $UserData.PreferredName.TrimEnd()
+        EmailAddress      = "$(($UserData.PreferredName.TrimEnd()).Split(" ")[0][0]+($UserData.PreferredName.TrimEnd()).Split(" ")[1])" + '@REDACTED.org'
+        EmployeeID        = $UserData.EmployeeID.TrimEnd()
         ErrorAction       = 'Stop'
         Fax               = $UserData.SecurityCard
-        GivenName         = "$(($UserData.PreferredName).Split(" ")[0])"
+        GivenName         = "$(($UserData.PreferredName.TrimEnd()).Split(" ")[0])"
         Manager           = $Manager.SamAccountName
-        Name              = $UserData.PreferredName
-        Office            = $UserData.OfficeLocation
+        Name              = $UserData.PreferredName.TrimEnd()
+        Office            = $UserData.OfficeLocation.TrimEnd()
         Organization      = 'REDACTED'
-        SamAccountName    = "$(($UserData.PreferredName).Split(" ")[0][0]+($UserData.PreferredName).Split(" ")[1])"
-        Surname           = "$(($UserData.PreferredName).Split(" ")[1])"
-        Title             = $UserData.Title
-        UserPrincipalName = "$(($UserData.PreferredName).Split(" ")[0][0]+($UserData.PreferredName).Split(" ")[1])" + '@REDACTED.org'
+        SamAccountName    = "$(($UserData.PreferredName.TrimEnd()).Split(" ")[0][0]+($UserData.PreferredName.TrimEnd()).Split(" ")[1])"
+        Surname           = "$(($UserData.PreferredName.TrimEnd()).Split(" ")[1])"
+        Title             = $UserData.Title.TrimEnd()
+        UserPrincipalName = "$(($UserData.PreferredName.TrimEnd()).Split(" ")[0][0]+($UserData.PreferredName.TrimEnd()).Split(" ")[1])" + '@REDACTED.org'
     }
     try {
         New-ADUser @Properties
@@ -117,7 +117,7 @@ function New-User {
     }
     
     # Gets the new users data, used in other spots.
-    $Name = $UserData.PreferredName
+    $Name = $UserData.PreferredName.TrimEnd()
     $Prop = @(
         'Manager', 'Department', 'Title', 'Fax',
         'EmployeeID', 'OfficePhone', 'Office'
@@ -132,6 +132,7 @@ function New-User {
     catch {
         Write-LogError 'Failed to create user! Stopping.'
         Write-LogError $PSItem.Exception.Message
+        break
     }
     
     # Creates a randomly generated password.
@@ -167,7 +168,7 @@ function New-User {
     Foreach-Object { Set-ADUser -Identity $PSItem.SamAccountName -Replace @{Info = "$($PSItem.Info)$IT,$HR,$MN,$TN" } -Credential $ADCredential }
     Set-ADUser -Identity $NewUser.SamAccountName -Replace @{
         EmployeeType        = $UserData.EmploymentType
-        EmployeeNumber      = $UserData.DeskLocation
+        EmployeeNumber      = "$(if($null -eq $UserData.DeskLocation) {'Remote'} else {$UserData.DeskLocation})"
         ExtensionAttribute1 = $UserData.ComputerType
         ExtensionAttribute2 = $UserData.StartDate
     } -Credential $ADCredential
@@ -175,7 +176,7 @@ function New-User {
     # Add direct reports, if any.
     if ($null -ne $UserData.DirectReports) {
         foreach ($Report in $UserData.DirectReports.Split(',')) {
-            $UserToAdd = $Report.TrimEnd().TrimStart()
+            $UserToAdd = $Report.TrimEnd()
             try {
                 $UserToAdd = Get-ADUser -Filter { Name -eq $UserToAdd } -ErrorAction Continue
                 $Properties = @{
@@ -192,7 +193,7 @@ function New-User {
     }
 
     # Adds groups copied from another user.
-    $UserToCopy = $UserData.UserToCopy.TrimEnd().TrimStart()
+    $UserToCopy = $UserData.UserToCopy.TrimEnd()
     $GroupsToCopy = Get-ADUser -Filter { Name -eq $UserToCopy }
     $GroupsToCopy = Get-ADPrincipalGroupMembership -Identity $GroupsToCopy.SamAccountName
     foreach ($Group in $GroupsToCopy) {
@@ -375,26 +376,28 @@ function New-User {
     </head>
     
     <body>
-        Hello,<br /><br />
-        Please add $($NewUser.Name) to the below SharePoint sites.<br />
+        Hello Admin,<br /><br />
+        $($Manager.Name) has a new user starting on $($UserData.StartDate).<br/>
+        Please add $($NewUser.Name) to the below SharePoint sites per $($Manager.GivenName)'s request.<br />
+        If you believe this is in error please contact <a title="" href="mailto:$($Manager.UserPrincipalName)">$($Manager.Name)</a>
         $SharePointSites
     </body>
 "@
     }
     $Properties = @{
-        To         = 'helpdesk@REDACTED.org'
-        CC         = 'REDACTED@REDACTED.org'
+        To         = 'mpolselli@REDACTED.org'
         From       = 'noreply@REDACTED.org'
         Subject    = "New Hire SharePoint Access - $($NewUser.Name)"
         Body       = $Body
         BodyAsHTML = $true
         SMTPServer = 'REDACTED'
         UseSSL     = $true
+        Priority   = 'High'
     }
     Send-MailMessage @Properties
 
     # Gives the licenses some time to activate, this should avoid errors when assigning a phone number
-    $Seconds = 300
+    $Seconds = 480
     for ($d = 0; $d -lt $Seconds; $d++) {
         $Percent = [System.Math]::Round($d * 100 / $Seconds)
         Write-Progress -Activity 'Activating licenses. This will take a few minutes.' -Status "$Percent%" -PercentComplete $Percent
@@ -620,7 +623,7 @@ function New-User {
         To         = 'helpdesk@REDACTED.org'
         CC         = $Manager.UserPrincipalName, 'REDACTED@REDACTED.org'
         From       = 'noreply@REDACTED.org'
-        Subject    = "[Ticket #$TicketNumber]"
+        Subject    = "[Ticket #$TicketNumber] New Hire Onboarding - $($NewUser.Name)"
         Body       = $Body
         BodyAsHTML = $true
         UseSSL     = $true

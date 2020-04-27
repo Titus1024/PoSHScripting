@@ -32,24 +32,9 @@ function Get-Computer {
         break
     }
 
-    
-    $Computer = Get-ADComputer -Identity $Identity -Properties * |
-    Select-Object 'Created', 'Description', 'DistinguishedName', 'DNSHostName',
-    'Enabled', 'IPv4Address', 'isDeleted', 'LastLogonDate', 'Location', 'LockedOut',
-    'logonCount', 'Modified', 'Name', 'ObjectGUID', 'objectSid', 'OperatingSystem'
-    Write-Output $Computer | Format-List
-    
-    $TestConnection = Test-Connection $Identity -Quiet -Count 1
-    if ($TestConnection) {
-        $LastBootUp = Get-CimInstance -ComputerName $Identity -ClassName Win32_OperatingSystem |
-        Select-Object LastBootUpTime
-        Write-Output $LastBootUp
-    }
-    else {
-        Write-Output "Unable to get last boot-up time.`nDevice is currently offline or unavailable."
-    }
-
-    if ($BitLockerKey) {
+    $Computer = Get-ADComputer -Identity $Identity -Properties DistinguishedName
+    if ($BitLockerKey -eq $true) {
+        Write-Output 'hi 3'
         $Credential = Use-PSCred PSADAcctMgmt
         $Properties = @{
             Filter     = { ObjectClass -eq 'msFVE-RecoveryInformation' }
@@ -58,8 +43,29 @@ function Get-Computer {
             Credential = $Credential
         }
         $BitLocker_Object = Get-ADObject @Properties | Select-Object @{n = 'Recovery Key'; e = { $PSItem.'msFVE-RecoveryPassword' } }
-        Write-Output $BitLocker_Object
-    }    
+        
+    }
+    $Computer = Get-ADComputer -Identity $Identity -Properties * |
+    Select-Object 'Created', 'Description', 'DistinguishedName', 'DNSHostName',
+    'Enabled', 'IPv4Address', 'isDeleted', 'LastLogonDate', 'Location', 'LockedOut',
+    'logonCount', 'Modified', 'Name', 'ObjectGUID', 'objectSid', 'OperatingSystem'
+    Write-Output $Computer | Format-List
+    Write-Output $BitLocker_Object
+    Write-Output 'hi'
+    
+    $TestConnection = Test-Connection $Computer.Name -Quiet -Count 1
+    if ($TestConnection) {
+        $LastBootUp = Get-CimInstance -ComputerName $Computer.Name -ClassName Win32_OperatingSystem |
+        Select-Object LastBootUpTime
+        Write-Output $LastBootUp
+    }
+    else {
+        Write-Output "Unable to get last boot-up time.`nDevice is currently offline or unavailable."
+    }
+    #>
+    Write-Output 'hi 2'
+
+    Write-Output 'hi 4'
 }
 
 $IdentityBlock = {
