@@ -52,7 +52,7 @@ function Update-PSCred {
             do {
                 $RandomPW = [System.Web.Security.Membership]::GeneratePassword(30, 10)
             }
-            Until ($RandomPW -match '\d')
+            Until ($RandomPW -match '^(?=.*[A-Z].*[A-Z])(?=.*[!@#$%^&*()_])(?=.*[0-9].*[0-9])(?=.*[a-z].*[a-z].*[a-z]).{30}$')
         $Credential = (ConvertTo-SecureString $RandomPW -AsPlainText -Force)
     
         if ($UpdatePSADAcctMgmtPW) {
