@@ -285,7 +285,7 @@ function Disable-User {
             do {
                 $RandomPW = [System.Web.Security.Membership]::GeneratePassword(20, 8)
             }
-            Until ($RandomPW -match '\d')
+            Until ($RandomPW -match '^(?=.*[A-Z].*[A-Z])(?=.*[!@#$%^&*()_])(?=.*[0-9].*[0-9])(?=.*[a-z].*[a-z].*[a-z]).{20}$')
             $Properties = @{
                 Identity    = $User.SamAccountName
                 Reset       = $true
@@ -383,7 +383,7 @@ function Disable-User {
 
     # Remove user from distribution groups.
     $Groups = Import-Csv -Path \\$env:USERDNSDOMAIN\IT\PowerShell\DynamicParamFiles\DistributionGroupPermissions.csv |
-    Where-Object { $PSitem.Name -eq $User.Name }
+    Where-Object { $PSItem.Name -eq $User.Name }
     foreach ($Group in $Groups) {
         try {
             Remove-DistributionGroupMember -Identity $Group.GroupName -Member $User.SamAccountName -ErrorAction Continue -Confirm:$false
@@ -560,6 +560,7 @@ REDACTED IT
         Write-LogError $PSItem.Exception.Message -ShowOutput
         Disconnect-SPOService
     }
+    #TODO: Add token removal for all active logins.
     #}
 
     $HelpDeskURL = "http://helpdesk.REDACTED.org/portal/view-help-request/$TicketNumber"
@@ -763,24 +764,9 @@ function Get-Computer {
         break
     }
 
-    
-    $Computer = Get-ADComputer -Identity $Identity -Properties * |
-    Select-Object 'Created', 'Description', 'DistinguishedName', 'DNSHostName',
-    'Enabled', 'IPv4Address', 'isDeleted', 'LastLogonDate', 'Location', 'LockedOut',
-    'logonCount', 'Modified', 'Name', 'ObjectGUID', 'objectSid', 'OperatingSystem'
-    Write-Output $Computer | Format-List
-    
-    $TestConnection = Test-Connection $Identity -Quiet -Count 1
-    if ($TestConnection) {
-        $LastBootUp = Get-CimInstance -ComputerName $Identity -ClassName Win32_OperatingSystem |
-        Select-Object LastBootUpTime
-        Write-Output $LastBootUp
-    }
-    else {
-        Write-Output "Unable to get last boot-up time.`nDevice is currently offline or unavailable."
-    }
-
-    if ($BitLockerKey) {
+    $Computer = Get-ADComputer -Identity $Identity -Properties DistinguishedName
+    if ($BitLockerKey -eq $true) {
+        Write-Output 'hi 3'
         $Credential = Use-PSCred PSADAcctMgmt
         $Properties = @{
             Filter     = { ObjectClass -eq 'msFVE-RecoveryInformation' }
@@ -789,8 +775,29 @@ function Get-Computer {
             Credential = $Credential
         }
         $BitLocker_Object = Get-ADObject @Properties | Select-Object @{n = 'Recovery Key'; e = { $PSItem.'msFVE-RecoveryPassword' } }
-        Write-Output $BitLocker_Object
-    }    
+        
+    }
+    $Computer = Get-ADComputer -Identity $Identity -Properties * |
+    Select-Object 'Created', 'Description', 'DistinguishedName', 'DNSHostName',
+    'Enabled', 'IPv4Address', 'isDeleted', 'LastLogonDate', 'Location', 'LockedOut',
+    'logonCount', 'Modified', 'Name', 'ObjectGUID', 'objectSid', 'OperatingSystem'
+    Write-Output $Computer | Format-List
+    Write-Output $BitLocker_Object
+    Write-Output 'hi'
+    
+    $TestConnection = Test-Connection $Computer.Name -Quiet -Count 1
+    if ($TestConnection) {
+        $LastBootUp = Get-CimInstance -ComputerName $Computer.Name -ClassName Win32_OperatingSystem |
+        Select-Object LastBootUpTime
+        Write-Output $LastBootUp
+    }
+    else {
+        Write-Output "Unable to get last boot-up time.`nDevice is currently offline or unavailable."
+    }
+    #>
+    Write-Output 'hi 2'
+
+    Write-Output 'hi 4'
 }
 
 $IdentityBlock = {
@@ -1160,6 +1167,52 @@ function Get-ReverseDNSLookup {
 }
 
 
+function Get-SSRandomPassword {
+    <#
+.DESCRIPTION
+    Developer:  Mike Polselli
+    PSVersion:  5.0
+    Language:   PowerShell
+    Purpose:    Generates a random password.
+.PARAMETER Help
+    Displays helpful information about the script.
+.PARAMETER PasswordLength
+    Defines the length of the randomly generated password. The default value is 12.
+.EXAMPLE
+    Get-RandomPassword -Help
+.EXAMPLE
+    Get-RandomPassword
+.EXAMPLE
+    Get-RandomPassword -PasswordLength 15
+.Link
+    Submit issues, bugs, feature requests, etc. to the REDACTED Gitlab group.
+    https://REDACTED/groups/REDACTED/powershell/-/issues
+#>
+    [cmdletbinding(DefaultParameterSetName = "Primary")]
+    param (
+        [Parameter(ParameterSetName, Position = 0)][int]$PasswordLength = 12,
+        [Parameter(ParameterSetName = "Help")][switch]$Help
+    )
+    if ($Help) {
+        Get-Help $MyInvocation.MyCommand.Name -Full | more
+        break
+    }
+    if ($PasswordLength -le 8) {
+        Write-Warning 'Minimum Password length is nine (9).'
+        break
+    }
+    [Reflection.Assembly]::LoadWithPartialName("System.Web") | Out-Null
+    do {
+        $RandomPW = [System.Web.Security.Membership]::GeneratePassword($PasswordLength, 4)
+    }
+    Until ($RandomPW -match "^(?=.*[A-Z].*[A-Z])(?=.*[!@#$%^&*()_])(?=.*[0-9].*[0-9])(?=.*[a-z].*[a-z].*[a-z]).{$PasswordLength}$")
+    $RandomPW | clip
+    Write-Output "Randomly Generated Password: $RandomPW"
+    Write-Output "Password copied to clipboard."
+    Remove-Variable RandomPW
+}
+
+
 function Get-UserInformation {
     <#
 .DESCRIPTION
@@ -1340,22 +1393,22 @@ function New-User {
         Company           = 'REDACTED'
         Confirm           = $false
         Credential        = $ADCredential
-        Department        = $UserData.Department
-        Description       = $UserData.Title
-        DisplayName       = $UserData.PreferredName
-        EmailAddress      = "$(($UserData.PreferredName).Split(" ")[0][0]+($UserData.PreferredName).Split(" ")[1])"+'@REDACTED.org'
-        EmployeeID        = $UserData.EmployeeID
+        Department        = $UserData.Department.TrimEnd()
+        Description       = $UserData.Title.TrimEnd()
+        DisplayName       = $UserData.PreferredName.TrimEnd()
+        EmailAddress      = "$(($UserData.PreferredName.TrimEnd()).Split(" ")[0][0]+($UserData.PreferredName.TrimEnd()).Split(" ")[1])" + '@REDACTED.org'
+        EmployeeID        = $UserData.EmployeeID.TrimEnd()
         ErrorAction       = 'Stop'
         Fax               = $UserData.SecurityCard
-        GivenName         = "$(($UserData.PreferredName).Split(" ")[0])"
+        GivenName         = "$(($UserData.PreferredName.TrimEnd()).Split(" ")[0])"
         Manager           = $Manager.SamAccountName
-        Name              = $UserData.PreferredName
-        Office            = $UserData.OfficeLocation
+        Name              = $UserData.PreferredName.TrimEnd()
+        Office            = $UserData.OfficeLocation.TrimEnd()
         Organization      = 'REDACTED'
-        SamAccountName    = "$(($UserData.PreferredName).Split(" ")[0][0]+($UserData.PreferredName).Split(" ")[1])"
-        Surname           = "$(($UserData.PreferredName).Split(" ")[1])"
-        Title             = $UserData.Title
-        UserPrincipalName = "$(($UserData.PreferredName).Split(" ")[0][0]+($UserData.PreferredName).Split(" ")[1])"+'@REDACTED.org'
+        SamAccountName    = "$(($UserData.PreferredName.TrimEnd()).Split(" ")[0][0]+($UserData.PreferredName.TrimEnd()).Split(" ")[1])"
+        Surname           = "$(($UserData.PreferredName.TrimEnd()).Split(" ")[1])"
+        Title             = $UserData.Title.TrimEnd()
+        UserPrincipalName = "$(($UserData.PreferredName.TrimEnd()).Split(" ")[0][0]+($UserData.PreferredName.TrimEnd()).Split(" ")[1])" + '@REDACTED.org'
     }
     try {
         New-ADUser @Properties
@@ -1366,7 +1419,7 @@ function New-User {
     }
     
     # Gets the new users data, used in other spots.
-    $Name = $UserData.PreferredName
+    $Name = $UserData.PreferredName.TrimEnd()
     $Prop = @(
         'Manager', 'Department', 'Title', 'Fax',
         'EmployeeID', 'OfficePhone', 'Office'
@@ -1381,6 +1434,7 @@ function New-User {
     catch {
         Write-LogError 'Failed to create user! Stopping.'
         Write-LogError $PSItem.Exception.Message
+        break
     }
     
     # Creates a randomly generated password.
@@ -1416,7 +1470,7 @@ function New-User {
     Foreach-Object { Set-ADUser -Identity $PSItem.SamAccountName -Replace @{Info = "$($PSItem.Info)$IT,$HR,$MN,$TN" } -Credential $ADCredential }
     Set-ADUser -Identity $NewUser.SamAccountName -Replace @{
         EmployeeType        = $UserData.EmploymentType
-        EmployeeNumber      = $UserData.DeskLocation
+        EmployeeNumber      = "$(if($null -eq $UserData.DeskLocation) {'Remote'} else {$UserData.DeskLocation})"
         ExtensionAttribute1 = $UserData.ComputerType
         ExtensionAttribute2 = $UserData.StartDate
     } -Credential $ADCredential
@@ -1424,7 +1478,7 @@ function New-User {
     # Add direct reports, if any.
     if ($null -ne $UserData.DirectReports) {
         foreach ($Report in $UserData.DirectReports.Split(',')) {
-            $UserToAdd = $Report.TrimEnd().TrimStart()
+            $UserToAdd = $Report.TrimEnd()
             try {
                 $UserToAdd = Get-ADUser -Filter { Name -eq $UserToAdd } -ErrorAction Continue
                 $Properties = @{
@@ -1441,7 +1495,7 @@ function New-User {
     }
 
     # Adds groups copied from another user.
-    $UserToCopy = $UserData.UserToCopy.TrimEnd().TrimStart()
+    $UserToCopy = $UserData.UserToCopy.TrimEnd()
     $GroupsToCopy = Get-ADUser -Filter { Name -eq $UserToCopy }
     $GroupsToCopy = Get-ADPrincipalGroupMembership -Identity $GroupsToCopy.SamAccountName
     foreach ($Group in $GroupsToCopy) {
@@ -1624,26 +1678,28 @@ function New-User {
     </head>
     
     <body>
-        Hello,<br /><br />
-        Please add $($NewUser.Name) to the below SharePoint sites.<br />
+        Hello Admin,<br /><br />
+        $($Manager.Name) has a new user starting on $($UserData.StartDate).<br/>
+        Please add $($NewUser.Name) to the below SharePoint sites per $($Manager.GivenName)'s request.<br />
+        If you believe this is in error please contact <a title="" href="mailto:$($Manager.UserPrincipalName)">$($Manager.Name)</a>
         $SharePointSites
     </body>
 "@
     }
     $Properties = @{
-        To         = 'helpdesk@REDACTED.org'
-        CC         = 'REDACTED@REDACTED.org'
+        To         = 'mpolselli@REDACTED.org'
         From       = 'noreply@REDACTED.org'
         Subject    = "New Hire SharePoint Access - $($NewUser.Name)"
         Body       = $Body
         BodyAsHTML = $true
         SMTPServer = 'REDACTED'
         UseSSL     = $true
+        Priority   = 'High'
     }
     Send-MailMessage @Properties
 
     # Gives the licenses some time to activate, this should avoid errors when assigning a phone number
-    $Seconds = 300
+    $Seconds = 480
     for ($d = 0; $d -lt $Seconds; $d++) {
         $Percent = [System.Math]::Round($d * 100 / $Seconds)
         Write-Progress -Activity 'Activating licenses. This will take a few minutes.' -Status "$Percent%" -PercentComplete $Percent
@@ -1765,7 +1821,7 @@ function New-User {
     NewBulletLine -BulletHeader 'Title' -BulletText $NewUser.Title
     $Doc.Style = 'Normal'
     Heading
-    $Doc.TypeText('Contact People')
+    $Doc.TypeText('Contact Info')
     $Doc.TypeParagraph()
     NewBulletLine -BulletHeader 'HR Contact' -BulletText 'Kerri Hall - ' -BulletHyperLink 'mailto:REDACTED@REDACTED.org' -BulletHyperLinkText 'REDACTED@REDACTED.org'
     NewBulletLine -BulletHeader 'Payroll Contact' -BulletText 'Lyra Trapp - ' -BulletHyperLink 'mailto:REDACTED@REDACTED.org' -BulletHyperLinkText 'REDACTED@REDACTED.org'
@@ -1788,10 +1844,10 @@ function New-User {
     try {
         $DefaultPrinter = (Get-WmiObject -ClassName Win32_Printer -Filter "Default=$true").Name
         if ($DefaultPrinter -notlike "*Print Anywhere*") {
-            $null = (Get-WmiObject -ClassName Win32_Printer -Filter "Name='Print Anywhere'").SetDefaultPrinter()
+            $null = (Get-WmiObject -ClassName Win32_Printer -Filter "Name='Print Anywhere'").SetDefaultPrinter() | Out-Null
         }
-        Start-Process -FilePath $DocName -Verb Print
-        $null = (Get-WmiObject -ClassName Win32_Printer -Filter "Name='$DefaultPrinter'").SetDefaultPrinter()
+        #Start-Process -FilePath $DocName -Verb Print
+        $null = (Get-WmiObject -ClassName Win32_Printer -Filter "Name='$DefaultPrinter'").SetDefaultPrinter() | Out-Null
     }
     catch {
         Write-Output "Print settings were not set properly, confirm that the document has been printed."
@@ -1858,7 +1914,8 @@ function New-User {
 
     <body>
         Hello $($Manager.Name),<br />
-        Your new employee, $($NewUser.Name) has been onboarded.<br /><br />
+        Your new employee, $($NewUser.Name) has been onboarded.<br />
+        Please see attached document that has been provided to $($NewUser.Name).<br /><br/>
         Best Regards,<br />
         REDACTED IT
         <p id="Note">Note: Do not reply to this email, this was an automated task and this mailbox is not monitored.</p>
@@ -1868,7 +1925,7 @@ function New-User {
         To         = 'helpdesk@REDACTED.org'
         CC         = $Manager.UserPrincipalName, 'REDACTED@REDACTED.org'
         From       = 'noreply@REDACTED.org'
-        Subject    = "[Ticket #$TicketNumber]"
+        Subject    = "[Ticket #$TicketNumber] New Hire Onboarding - $($NewUser.Name)"
         Body       = $Body
         BodyAsHTML = $true
         UseSSL     = $true
@@ -2034,6 +2091,7 @@ function Reset-UserPassword {
     [cmdletbinding(DefaultParameterSetName = "Primary")]
     param (
         [Parameter(ParameterSetName = "Primary", Position = 0, Mandatory = $true)][string]$Identity,
+        [Parameter(ParameterSetName = "Primary", Position = 1, Mandatory = $true)][string]$TicketNumber,
         [Parameter(ParameterSetName = "Primary", Position = 1)][switch]$NoPasswordResetOnLogon,
         [Parameter(ParameterSetName = "Help")][switch]$Help
     )
@@ -2046,6 +2104,116 @@ function Reset-UserPassword {
     Set-ADAccountPassword -Identity $User.SamAccountName -Reset -NewPassword (ConvertTo-SecureString -AsPlainText 'REDACTED001' -Force) -Credential $Credential
     if (!$NoPasswordResetOnLogon) {
         Set-ADUser -Identity $User.SamAccountName -ChangePasswordAtLogon:$true -Credential $Credential
+        $Body = @"
+                <head>
+                <style type='text/css'>
+                p#Note {
+                font-weight: bold;
+                font-size: 0.8em;
+                }
+                span.Bold {
+                font-weight: bold;
+                }
+                </style>
+                </head>
+                <body>
+                Hello $($User.Name),<br/>
+                <br/>
+                Your password has been reset to the company default of REDACTED001, please wait <span class="Bold">24</span> hours before resetting your password.<br/>
+                <br/>
+                For your convenience, please see below for the password complexity standards:
+                <ul>
+                <li>Must <span class="Bold">not</span> contain the user's account name or parts of the user's full name that exceed two consecutive characters</li>
+                <li>Must be at least <span class="Bold">10</span> characters in length</li>
+                  <li>Passwords expire every <span class="Bold">60</span> days.</li>
+                  <li>Must not be one of your past <span class="Bold">24</span> passwords.</li>
+                </ul>
+                Must contain characters from <span class="Bold">three</span> of the following four categories:
+                <ul>
+                <li>English uppercase characters (A through Z)</li>
+                <li>English lowercase characters (a through z)</li>
+                <li>Base 10 digits (0 through 9)</li>
+                <li>Non-alphabetic characters (for example, !, $, #, %)</li>
+                </ul>
+                <p>
+                <span class="BoldQA">Q:</span> How do I reset my password?<br/>
+                <span class="BoldQA">A:</span> Press <span class="Bold">Ctrl+Alt+Del</span> while signed in and select <span class="Bold">'Change a Password'</span>.<br/>
+                <span class="BoldQA">Q:</span> My password is going to expire while I am out of the office, can I still reset my password?<br/>
+                <span class="BoldQA">A:</span> Yes, but you will need to be connected to the <span class="Bold">VPN</span> before resetting your password.
+                </p>
+                <br/>
+                Best Regards,<br/>
+                REDACTED IT
+                <p id="Note">Note: Do not reply to this email, this was an automated task and this mailbox is not monitored.</p>
+                </body>
+"@
+        $Properties = @{
+            To         = 'mpolselli@REDACTED.org'
+            From       = 'noreply@REDACTED.org'
+            Subject    = "[Ticket #$TicketNumber] Password Reset"
+            Body       = $Body
+            BodyAsHTML = $true
+            UseSSL     = $true
+            SMTPServer = 'REDACTED'
+            Priority   = 'High'
+        }
+        Send-MailMessage @Properties
+    }
+    else {
+        $Body = @"
+                <head>
+                <style type='text/css'>
+                p#Note {
+                font-weight: bold;
+                font-size: 0.8em;
+                }
+                span.Bold {
+                font-weight: bold;
+                }
+                </style>
+                </head>
+                <body>
+                Hello $($User.Name),<br/>
+                <br/>
+                Your password has been reset to the company default of REDACTED001, you will need to reset it on your next login.
+                <br/>
+                For your convenience, please see below for the password complexity standards:
+                <ul>
+                <li>Must <span class="Bold">not</span> contain the user's account name or parts of the user's full name that exceed two consecutive characters</li>
+                <li>Must be at least <span class="Bold">10</span> characters in length</li>
+                  <li>Passwords expire every <span class="Bold">60</span> days.</li>
+                  <li>Must not be one of your past <span class="Bold">24</span> passwords.</li>
+                </ul>
+                Must contain characters from <span class="Bold">three</span> of the following four categories:
+                <ul>
+                <li>English uppercase characters (A through Z)</li>
+                <li>English lowercase characters (a through z)</li>
+                <li>Base 10 digits (0 through 9)</li>
+                <li>Non-alphabetic characters (for example, !, $, #, %)</li>
+                </ul>
+                <p>
+                <span class="BoldQA">Q:</span> How do I reset my password?<br/>
+                <span class="BoldQA">A:</span> Press <span class="Bold">Ctrl+Alt+Del</span> while signed in and select <span class="Bold">'Change a Password'</span>.<br/>
+                <span class="BoldQA">Q:</span> My password is going to expire while I am out of the office, can I still reset my password?<br/>
+                <span class="BoldQA">A:</span> Yes, but you will need to be connected to the <span class="Bold">VPN</span> before resetting your password.
+                </p>
+                <br/>
+                Best Regards,<br/>
+                REDACTED IT
+                <p id="Note">Note: Do not reply to this email, this was an automated task and this mailbox is not monitored.</p>
+                </body>
+"@
+        $Properties = @{
+            To         = 'mpolselli@REDACTED.org'
+            From       = 'noreply@REDACTED.org'
+            Subject    = "[Ticket #$TicketNumber] Password Reset"
+            Body       = $Body
+            BodyAsHTML = $true
+            UseSSL     = $true
+            SMTPServer = 'REDACTED'
+            Priority   = 'High'
+        }
+        Send-MailMessage @Properties
     }
 }
 
