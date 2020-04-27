@@ -44,19 +44,11 @@ function Write-LogError {
         break
     }
 
-    $Length = $ErrorMessage.Length + 31
-    $Dashes = ('-' * $Length)
     if ($ShowOutput) {
-        Write-Output "/$Dashes\,"
-        Write-Output "|$(Get-LogTime) ERROR - $ErrorMessage|"
-        Write-Output "\$Dashes/,"
-        #"/$Dashes\" >> $Log
-        "|$(Get-LogTime) ERROR - $ErrorMessage|" >> $Log
-        #"\$Dashes/" >> $Log
+        Write-Host "$(Get-LogTime) ERROR: $ErrorMessage - Line Number: $($PSItem.InvocationInfo.ScriptLineNumber)" -ForegroundColor Red
+        "$(Get-LogTime) ERROR: $ErrorMessage - Line Number: $($PSItem.InvocationInfo.ScriptLineNumber)" >> $Log
     }
     else {
-        #"/$Dashes\" >> $Log
-        "|$(Get-LogTime) ERROR - $ErrorMessage|" >> $Log
-        #"\$Dashes/" >> $Log    
+        "$(Get-LogTime) ERROR: $ErrorMessage - Line Number: $($PSItem.InvocationInfo.ScriptLineNumber)" >> $Log
     }
 }

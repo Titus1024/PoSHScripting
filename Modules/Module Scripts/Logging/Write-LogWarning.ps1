@@ -30,10 +30,10 @@ function Write-LogWarning {
     }
 
     if ($ShowOutput) {
-        "$(Get-LogTime) $WarningMessage" >> $Log
-        Write-Warning "$(Get-LogTime) $WarningMessage"
+        "$(Get-LogTime) $WarningMessage - Line Number: $($PSItem.InvocationInfo.ScriptLineNumber)" >> $Log
+        Write-Warning "$(Get-LogTime) $WarningMessage - Line Number: $($PSItem.InvocationInfo.ScriptLineNumber)"
     }
     else {
-        "$(Get-LogTime) $WarningMessage" >> $Log
+        "$(Get-LogTime) $WarningMessage - Line Number: $($PSItem.InvocationInfo.ScriptLineNumber)" >> $Log
     }
 }
