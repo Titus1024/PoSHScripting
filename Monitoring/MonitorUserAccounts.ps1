@@ -114,9 +114,9 @@ function MonitorUserAccounts {
         </body>
 "@
         $MHT = @{
-            To         = 'IT@REDACTED.org'
-            CC         = 'basen@REDACTED.org', 'akhamenka@REDACTED.org'
-            From       = 'noreply@REDACTED.org'
+            To         = 'REDACTED@REDACTED.org'
+            CC         = 'REDACTED@REDACTED.org', 'REDACTED@REDACTED.org'
+            From       = 'REDACTED@REDACTED.org'
             Subject    = 'User Security Report'
             Body       = $Body
             BodyAsHTML = $true
@@ -151,8 +151,8 @@ function MonitorUserAccounts {
                 </body>
 "@
                 $BadPasswordHelpdesk = @{
-                    To         = 'helpdesk@REDACTED.org'
-                    From       = 'noreply@REDACTED.org'
+                    To         = 'REDACTED@REDACTED.org'
+                    From       = 'REDACTED@REDACTED.org'
                     Subject    = "Bad Password Alert - $($Group.Name)"
                     Body       = $Body
                     BodyAsHTML = $true
@@ -187,8 +187,8 @@ function MonitorUserAccounts {
                 </body>
 "@
                 $LockoutHelpdesk = @{
-                    To         = 'helpdesk@REDACTED.org'
-                    From       = 'noreply@REDACTED.org'
+                    To         = 'REDACTED@REDACTED.org'
+                    From       = 'REDACTED@REDACTED.org'
                     Subject    = "Account Lockout Alert - $($Group.Name)"
                     Body       = $Body
                     BodyAsHTML = $true
