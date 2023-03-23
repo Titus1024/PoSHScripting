@@ -1,12 +1,12 @@
 name: MSDO windows-latest
-    on:
+on:
       push:
         branches: [ main ]
       pull_request:
         branches: [ main ]
       workflow_dispatch:
 
-    jobs:
+jobs:
       sample:
 
         # MSDO runs on windows-latest and ubuntu-latest.
